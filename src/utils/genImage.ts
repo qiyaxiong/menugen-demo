@@ -5,7 +5,13 @@ export interface GeneratedImage {
   error?: string;
 }
 
-export async function generateDishImage(dishName: string): Promise<string> {
+export interface UsageInfo {
+  count: number;
+  limit: number;
+  remaining: number;
+}
+
+export async function generateDishImage(dishName: string): Promise<{ imageUrl: string; usage?: UsageInfo; }> {
   try {
     const response = await fetch('/api/genimg', {
       method: 'POST',
@@ -16,7 +22,8 @@ export async function generateDishImage(dishName: string): Promise<string> {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
@@ -25,7 +32,10 @@ export async function generateDishImage(dishName: string): Promise<string> {
       throw new Error(data.error);
     }
 
-    return data.imageUrl;
+    return {
+      imageUrl: data.imageUrl,
+      usage: data.usage
+    };
   } catch (error) {
     console.error('Image generation error:', error);
     throw error;

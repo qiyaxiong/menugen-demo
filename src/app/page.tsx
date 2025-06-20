@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useUser, SignInButton, UserButton } from '@clerk/nextjs';
 import { extractTextFromImage, parseMenuText, OCRProvider } from '@/utils/ocr';
 import DishCard from '@/components/DishCard';
 
 export default function Home() {
+  const { isSignedIn, user, isLoaded } = useUser();
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedText, setExtractedText] = useState<string>('');
@@ -164,17 +166,64 @@ export default function Home() {
     console.log('Generate all dishes:', dishNames);
   };
 
+  // Show loading while checking auth status
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Show sign-in screen if not authenticated
+  if (!isSignedIn) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            MenuGen
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Sign in to start generating AI images from your menu photos
+          </p>
+          <SignInButton mode="modal">
+            <button className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+              Sign In to Continue
+            </button>
+          </SignInButton>
+        </div>
+      </div>
+    );
+  }
+
+  // Main authenticated content
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 dark:text-white mb-4">
-            MenuGen
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Upload a photo of a restaurant menu and watch AI generate beautiful images of each dish
-          </p>
+        {/* Header with User Button */}
+        <div className="flex justify-between items-center mb-8">
+          <div className="text-center flex-1">
+            <h1 className="text-4xl md:text-6xl font-bold text-gray-900 dark:text-white mb-4">
+              MenuGen
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Upload a photo of a restaurant menu and watch AI generate beautiful images of each dish
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Welcome, {user?.firstName || user?.emailAddresses[0]?.emailAddress}!
+              </p>
+            </div>
+            <UserButton 
+              appearance={{
+                elements: {
+                  avatarBox: "w-10 h-10"
+                }
+              }}
+            />
+          </div>
         </div>
 
         {/* OCR Service Selector */}
@@ -343,8 +392,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-
 
         {/* Dish Names Editor */}
         {dishNames.length > 0 && !isProcessing && (

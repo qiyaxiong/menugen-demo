@@ -27,11 +27,14 @@ export default function DishCard({ dishName, initialImage }: DishCardProps) {
 
     try {
       console.log('调用 generateDishImage 函数...');
-      const imageUrl = await generateDishImage(dishName);
-      console.log('成功获取图片 URL:', imageUrl);
+      const result = await generateDishImage(dishName);
+      console.log('成功获取图片 URL:', result.imageUrl);
+      if (result.usage) {
+        console.log('使用情况:', `${result.usage.count}/${result.usage.limit} (剩余: ${result.usage.remaining})`);
+      }
       
       setImage({
-        url: imageUrl,
+        url: result.imageUrl,
         dishName,
         status: 'success'
       });

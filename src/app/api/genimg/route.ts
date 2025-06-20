@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { OpenAI } from 'openai';
 import { createImagePrompt } from '@/utils/genImage';
+
+// Simple in-memory usage tracking (in production, use a database)
+const userUsage = new Map<string, { count: number; date: string }>();
+const DAILY_LIMIT = 20; // 20 images per day per user
 
 // 延迟初始化豆包客户端，避免启动时错误
 function createClient() {
@@ -19,6 +24,53 @@ function createClient() {
 export async function POST(request: NextRequest) {
   try {
     console.log('=== 图片生成 API 开始 ===');
+    
+    // Check authentication first
+    const { userId } = await auth();
+    
+    if (!userId) {
+      console.log('错误: 用户未认证');
+      return NextResponse.json(
+        { error: 'Unauthorized. Please sign in to generate images.' },
+        { status: 401 }
+      );
+    }
+    
+    // Get user info for better logging
+    const user = await currentUser();
+    const userEmail = user?.emailAddresses[0]?.emailAddress || 'unknown';
+    console.log('用户已认证, ID:', userId, 'Email:', userEmail);
+    
+    // Check daily usage limit
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const usage = userUsage.get(userId);
+    
+    if (usage) {
+      if (usage.date === today) {
+        if (usage.count >= DAILY_LIMIT) {
+          console.log(`用户 ${userId} 已达到今日使用限制 (${DAILY_LIMIT})`);
+          return NextResponse.json(
+            { 
+              error: `Daily limit reached (${DAILY_LIMIT} images). Please try again tomorrow.`,
+              usage: usage.count,
+              limit: DAILY_LIMIT
+            },
+            { status: 429 }
+          );
+        }
+        usage.count += 1;
+      } else {
+        // New day, reset count
+        usage.count = 1;
+        usage.date = today;
+      }
+    } else {
+      // First time user
+      userUsage.set(userId, { count: 1, date: today });
+    }
+    
+    const currentUsage = userUsage.get(userId)!;
+    console.log(`用户使用情况: ${currentUsage.count}/${DAILY_LIMIT} (${today})`);
     
     const { dishName } = await request.json();
     console.log('接收到的菜品名称:', dishName);
@@ -70,7 +122,15 @@ export async function POST(request: NextRequest) {
     console.log('成功生成图片 URL:', imageUrl);
     console.log('=== 图片生成 API 完成 ===');
 
-    return NextResponse.json({ imageUrl });
+    const finalUsage = userUsage.get(userId)!;
+    return NextResponse.json({ 
+      imageUrl,
+      usage: {
+        count: finalUsage.count,
+        limit: DAILY_LIMIT,
+        remaining: DAILY_LIMIT - finalUsage.count
+      }
+    });
 
   } catch (error) {
     console.error('=== 图片生成错误 ===');

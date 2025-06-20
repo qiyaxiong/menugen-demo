@@ -202,9 +202,9 @@ async function tesseractOCR(imageFile: File): Promise<OCRResult> {
     }
   ];
   
-  let bestResult: any = null;
+  let bestResult: { text: string; confidence: number } | null = null;
   let bestScore = 0;
-  let allResults: any[] = [];
+  const allResults: Array<{ config: string; text: string; confidence: number; score: number }> = [];
   
   // 尝试每种配置
   for (const config of configs) {
