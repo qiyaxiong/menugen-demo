@@ -125,10 +125,67 @@ def paddle_ocr_api():
         confidence_scores = []
         
         logger.info(f"OCR原始结果类型: {type(result)}")
+        logger.info(f"OCR结果长度: {len(result) if isinstance(result, (list, tuple)) else 'N/A'}")
         
-        # 处理新版PaddleOCR的返回格式
-        if isinstance(result, dict):
-            logger.info("检测到新版PaddleOCR字典格式")
+        # 处理PaddleOCR结果 - 支持多种格式
+        if isinstance(result, (list, tuple)) and len(result) > 0:
+            # 检查第一个元素是否为字典（新版格式）
+            first_item = result[0] if result else None
+            
+            if isinstance(first_item, dict) and 'rec_texts' in first_item:
+                logger.info("检测到新版PaddleOCR字典格式（包装在列表中）")
+                
+                # 新版PaddleOCR返回字典格式包装在列表中
+                item_dict = first_item
+                rec_texts = item_dict.get('rec_texts', [])
+                rec_scores = item_dict.get('rec_scores', [])
+                
+                logger.info(f"找到 {len(rec_texts)} 个识别文字")
+                logger.info(f"识别文字: {rec_texts}")
+                logger.info(f"置信度分数: {rec_scores}")
+                
+                for i, (text, score) in enumerate(zip(rec_texts, rec_scores)):
+                    if text and str(text).strip():
+                        texts.append(str(text))
+                        confidence_scores.append(float(score))
+                        logger.info(f"添加文字 {i}: '{text}', 置信度: {score}")
+                        
+            elif isinstance(first_item, (list, tuple)):
+                logger.info("检测到旧版PaddleOCR嵌套数组格式")
+                # 旧版PaddleOCR返回嵌套数组格式
+                for line_idx, line in enumerate(result):
+                    if line and isinstance(line, (list, tuple)):  # 确保line不为空且是列表/元组
+                        logger.info(f"处理第 {line_idx} 行，包含 {len(line)} 个项目")
+                        for item_idx, item in enumerate(line):
+                            try:
+                                # 检查item结构
+                                if not isinstance(item, (list, tuple)) or len(item) < 2:
+                                    logger.warning(f"跳过无效项结构: {type(item)}")
+                                    continue
+                                
+                                # 获取文字和置信度信息
+                                text_info = item[1]
+                                if not isinstance(text_info, (list, tuple)) or len(text_info) < 2:
+                                    logger.warning(f"跳过无效文字信息: {text_info}")
+                                    continue
+                                    
+                                text = str(text_info[0])  # 识别的文字
+                                confidence = float(text_info[1])  # 置信度
+                                
+                                if text.strip():  # 只添加非空文字
+                                    texts.append(text)
+                                    confidence_scores.append(confidence)
+                                    logger.info(f"添加文字: '{text}', 置信度: {confidence}")
+                                
+                            except (IndexError, TypeError, ValueError) as e:
+                                logger.warning(f"处理第 {line_idx} 行第 {item_idx} 项时出错: {e}")
+                                continue
+            else:
+                logger.warning(f"未知的列表格式，第一项类型: {type(first_item)}")
+                logger.info(f"第一项内容: {first_item}")
+                
+        elif isinstance(result, dict):
+            logger.info("检测到新版PaddleOCR直接字典格式")
             
             # 新版PaddleOCR返回字典格式
             if 'rec_texts' in result and 'rec_scores' in result:
@@ -148,39 +205,6 @@ def paddle_ocr_api():
                 logger.warning("未找到 rec_texts 或 rec_scores 字段")
                 logger.info(f"可用字段: {list(result.keys())}")
                 
-        elif isinstance(result, (list, tuple)) and len(result) > 0:
-            logger.info("检测到旧版PaddleOCR数组格式")
-            # 旧版PaddleOCR返回嵌套数组格式
-            for line_idx, line in enumerate(result):
-                if line:  # 确保line不为空
-                    logger.info(f"处理第 {line_idx} 行: {line}")
-                    for item_idx, item in enumerate(line):
-                        try:
-                            logger.info(f"处理第 {line_idx} 行第 {item_idx} 项: {item}")
-                            
-                            # 检查item结构
-                            if not isinstance(item, (list, tuple)) or len(item) < 2:
-                                logger.warning(f"跳过无效项: {item}")
-                                continue
-                            
-                            # 获取文字和置信度信息
-                            text_info = item[1]
-                            if not isinstance(text_info, (list, tuple)) or len(text_info) < 2:
-                                logger.warning(f"跳过无效文字信息: {text_info}")
-                                continue
-                                
-                            text = str(text_info[0])  # 识别的文字
-                            confidence = float(text_info[1])  # 置信度
-                            
-                            if text.strip():  # 只添加非空文字
-                                texts.append(text)
-                                confidence_scores.append(confidence)
-                                logger.info(f"添加文字: '{text}', 置信度: {confidence}")
-                            
-                        except (IndexError, TypeError, ValueError) as e:
-                            logger.warning(f"处理第 {line_idx} 行第 {item_idx} 项时出错: {e}")
-                            logger.warning(f"问题项内容: {item}")
-                            continue
         else:
             logger.warning(f"未知的OCR结果格式: {type(result)}")
             logger.info(f"结果内容: {result}")
